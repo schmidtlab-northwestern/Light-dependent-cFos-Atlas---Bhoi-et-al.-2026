@@ -143,41 +143,13 @@ Reads `data/raw_annotations/*.csv`, drops annotations flagged `Exclude = 1`, sum
 counts and areas per region per mouse, converts to density (cells/mm²), and joins
 the Allen ontology.
 
-Region filtering runs in three passes, and the order matters: drop the non-neural
-top-level divisions (fiber tracts, ventricular systems), drop numbered cortical
-layer subdivisions, then drop any region whose children are all individually
-present. Ancestry has to be resolved last, because which rows count as leaves
-depends on what the first two passes removed.
-
-Writes `data/compiled/density_by_region_batch.csv` and, in
-`data/compiled/cleaned_output/`, the wide (regions × mice) and long
-(one row per region per mouse) leaf tables.
-
-### Stage 2 — The confirmatory gate
+### Stage 2 
 
 **`notebooks/02_global_model_specification_grid.ipynb`**
 
 One scalar per mouse, `~ genotype * sex * light`, with the three-way interaction
 as the primary confirmatory statistic. No multiplicity problem and no per-region
 machinery.
-
-Four definitions of "whole-brain c-Fos" (unweighted mean over log regional
-densities, volume-weighted, root-annotation density, batch-residualized) are each
-crossed with two batch treatments, and every specification is fitted. The
-specification curve at the end shows the three-way estimate under all of them,
-with the full range across leave-one-mouse-out and leave-one-batch-out fits drawn
-behind it. A result that survives there is robust to the scalar definition, the
-batch treatment, and any single animal or batch.
-
-Also runs an optimizer and start-value check — four optimizers plus random starts,
-with non-converged fits excluded from the pass/fail range rather than pooled into it.
-
-The `root` specifications need `data/compiled/cleaned_output/density_root.csv`.
-If that file is absent the `root` specs are skipped with a message rather than
-silently substituted. Section 4a cross-checks contrast names against notebook 03's
-output; it is skipped on a first run and passes once notebook 03 has been run.
-
-Outputs to `results/global_model/`.
 
 ### Stage 3 — Per-region models, permutation, and enrichment
 
@@ -189,27 +161,7 @@ Then asks
 the two aggregate questions that per-region FDR cannot: is the effect **broad**
 across regions, and is it **concentrated in particular anatomy**.
 
-Three things worth knowing before reading the output:
-
-- **The permutation unit is always the mouse**, shuffled once per permutation and
-  propagated to every region. Shuffling region-by-region would destroy the
-  between-region correlation that is genuinely present and make the null far too
-  narrow.
-- **Interaction terms use Freedman–Lane** (permuting residuals from the reduced
-  model), not label shuffling. A plain label shuffle tests a composite null and is
-  close to powerless for an interaction when real lower-order effects are present.
-- **Enrichment claims are led by the spatial null**, not the random one. Naive
-  hypergeometric or Fisher tests on atlas data are badly false-positive-inflated
-  by spatial autocorrelation (Fulcher et al. 2021). The spatial null draws
-  size-matched *contiguous* region sets — the discrete-parcellation analogue of a
-  spin test. The random null is reported alongside, but an anatomically contiguous
-  set will beat scattered random sets for reasons that have nothing to do with
-  biology, so the spatial number is the honest one.
-
-Outputs to `results/per_region/`. Runtime is a few minutes at the default
-`N_PERM = 2000`.
-
-### Stage 4 — Contrast PLSC and Figure 5
+### Stage 4 — PLSC
 
 **`notebooks/04_contrast_plsc_figure5.ipynb`**
 
@@ -225,45 +177,12 @@ variables, the variant used by the BraiAn pipeline (Chiaruttini et al. 2025,
 *Cell Rep* 44:115876). Included for comparison, not for inference, and run on the
 same input so any difference is attributable to the method.
 
-Three matrices are in play and they are not interchangeable; every cell states
-which it uses:
-
-| Matrix | Contents |
-|---|---|
-| `Xl` | log density, raw |
-| `Xa` | `Xl` with immunostaining batch BLUPs removed |
-| `Xz` | `Xa`, per-mouse centered, then region z-scored |
-
-Per-mouse centering is what makes the main path a test of **redistribution**
-rather than a restatement of the global result. Panels 5A–5C deliberately use
-`Xl` instead: the intercept of the dark/light fit *is* the amplitude estimate, so
-centering would set the measured quantity to zero by construction.
-
-Each panel writes a tidy CSV next to the figure, so any panel can be rebuilt in
-Prism or Illustrator without re-running. The matplotlib output is for checking
-numbers, not for the manuscript.
-
-Outputs to `results/figures/` and `results/figure_data/`. At the default
-`N_PERM = N_BOOT = 10,000` this takes roughly 10–20 minutes.
-
 ### Stage 5 — Atlas heatmaps
 
 **`notebooks/05_atlas_heatmaps.ipynb`**
 
 Renders the per-region values exported by notebook 04 onto a coronal-slice grid,
 with optional independent data on each hemisphere.
-
-`RUN_TAG` must match the tag notebook 04 printed — the panel CSV filename embeds
-it. Notebook 04 prints its `RUN_TAG` in its first cell; the default is
-`cellmean_gainoff`. `PANEL` selects which export to render (`5H_light` or
-`5I_three_way`) and `VALUE_COL` selects which column is mapped.
-
-Rendering uses `allen_mouse_10um` for finer boundaries, while the analysis
-notebooks use `allen_mouse_25um`. The ontology is identical between the two, so
-acronyms match and no statistic depends on the choice — but Methods should state
-both resolutions rather than implying one was used throughout.
-
-Outputs to `results/figures/atlas/`.
 
 ---
 
@@ -285,67 +204,6 @@ They then restrict to the eighteen the manuscript reports, listed in the
 `PAPER_CONTRASTS` block of each notebook: three main effects, the three-way, six
 split two-ways, and eight simple effects. Both notebooks use the identical list,
 which is what notebook 02's §4a cross-check verifies.
-
-Dropped are the three pooled two-ways (superseded by their split forms, which is
-what Figure 2D reports) and the four `M_vs_F` simple effects (no figure reports a
-per-region sex simple effect). All three split *pairs* are kept in full, including
-`geno:sex | light` alongside `geno:sex | dark`: the two levels of a split are one
-decomposition of the three-way — their difference is the three-way, their average
-is the pooled term — so keeping one without the other would leave the
-decomposition asymmetric. Because BH-FDR is applied within each contrast across
-regions and never across contrasts, dropping a contrast cannot move the q-value
-of any contrast that is kept.
-
-**Contrasts are always weight vectors over the eight design cells**, projected
-through each model's own fitted cell design matrix. Unifying every contrast type
-— simple effect, two-way, three-way, main effect — onto one mechanism guarantees a
-consistent convention instead of risking drift between separately derived methods.
-It also means the treatment coding of any individual fit never touches an estimate
-or a standard error.
-
-**Logs are natural logs in the models.** Volcano plot axes are log₂. Both appear
-in the outputs, so check the column name before quoting a number.
-
-**Densities are log-transformed with a pseudocount** equal to half the smallest
-non-zero density in the matrix, computed once and reused everywhere.
-
-**`### CHOICE ###` and `### FLAG ###` markers** appear inline throughout the
-notebooks. `CHOICE` marks a consequential analytical decision with the reasoning
-attached; `FLAG` marks a known limitation or something that must be stated
-carefully in the manuscript. They are worth reading — most of the non-obvious
-methodology is documented there rather than here.
-
----
-
-## Caveats carried in the code
-
-These are documented at the point of use in the notebooks and repeated here so
-they are not missed:
-
-- **Global gain is a real confound.** Per-animal whole-brain mean log density
-  explains the large majority of per-region contrast estimates, and one
-  immunostaining batch composed entirely of one genotype group had the lowest
-  gains. No permutation test can separate a genuine regional effect from a
-  technical gain difference confounded with group assignment. This is what
-  motivates the gain-removal analysis in notebook 04 and the gain diagnostics in
-  notebook 03.
-- **PLSC bootstrap ratios are a stability measure, not a significance test**, and
-  they are uncorrected across regions. The usual normal-theory chance rate for
-  `|BSR| > 2` is 4.6%; simulation with these exact cell sizes gives roughly double
-  that, from small-n bootstrap SE bias. Language must be "stable contributors".
-- **Sex-involving permutation contrasts use an invalid null.** Sex was never
-  assigned by anyone, so those nulls cannot fully null an interaction. They are
-  reported as untested rather than as significance. This includes the three-way in
-  the PLSC panel.
-- **PLSC-nominated regions are exploratory.** Feeding them back into confirmatory
-  reads would be circular, and they are labelled accordingly.
-- **Label-permutation contrasts have a resolution floor.** With few mice per
-  stratum the number of distinct labellings can be smaller than `N_PERM`, and no
-  number of extra permutations pushes *p* below `1/(n_distinct + 1)`. The floor is
-  printed alongside each result and should be reported rather than written as
-  `p < .001`.
-
----
 
 ## Citation
 
