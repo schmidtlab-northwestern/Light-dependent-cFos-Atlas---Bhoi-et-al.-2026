@@ -1,0 +1,20 @@
+# Analysis environment for the whole-brain cFos atlas notebooks.
+# Python 3.10 or newer. Tested on 3.13.
+#
+# Note: allensdk is deliberately NOT used. It is incompatible with Python 3.13,
+# and the Allen CCFv3 ontology is reached instead through the Allen Brain Atlas
+# RMA API directly (notebook 01) and through brainglobe-atlasapi (notebooks 02-05).
+
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+statsmodels>=0.14
+patsy>=0.5
+matplotlib>=3.7
+
+# Allen CCFv3 atlas access and rendering
+brainglobe-atlasapi>=2.0
+brainglobe-heatmap>=0.5
+
+# Notebook interface
+jupyterlab>=4.0
