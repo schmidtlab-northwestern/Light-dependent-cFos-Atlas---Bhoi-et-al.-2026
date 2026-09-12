@@ -35,7 +35,6 @@ to the manuscript figures is in this repository, including the input data.
 │   │       ├── density_by_region_leaves_wide.csv
 │   │       └── density_by_region_leaves_long.csv
 │   └── mouse_info_template.csv      # Per-mouse metadata
-├── results/                         # All notebook outputs land here (gitignored)
 ├── requirements.txt
 └── README.md
 ```
